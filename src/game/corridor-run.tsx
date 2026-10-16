@@ -25,15 +25,71 @@ const SLICES = 88;
 
 const TRACK_LENGTH = 7000;
 
-const MAX_SPEED = 300;
-const MIN_SPEED = 70;
-const ACCEL = 260;
-const BRAKE = 420;
-const COAST = 80;
+interface DiffStats {
+  maxSpeed: number;
+  minSpeed: number;
+  accel: number;
+  brake: number;
+  coast: number;
+  steerAcc: number;
+  latDrag: number;
+  maxLat: number;
+}
 
-const STEER_ACC = 4400;
-const LAT_DRAG = 5;
-const MAX_LAT = 950;
+interface Difficulty {
+  id: string;
+  name: string;
+  blurb: string;
+  stats: DiffStats;
+}
+
+const DIFFICULTIES: Difficulty[] = [
+  {
+    id: "easy",
+    name: "Easy",
+    blurb: "Slow and steady.",
+    stats: {
+      maxSpeed: 200,
+      minSpeed: 70,
+      accel: 220,
+      brake: 420,
+      coast: 80,
+      steerAcc: 4600,
+      latDrag: 7,
+      maxLat: 1000,
+    },
+  },
+  {
+    id: "medium",
+    name: "Medium",
+    blurb: "Fast but forgiving.",
+    stats: {
+      maxSpeed: 300,
+      minSpeed: 70,
+      accel: 280,
+      brake: 440,
+      coast: 85,
+      steerAcc: 4400,
+      latDrag: 5,
+      maxLat: 950,
+    },
+  },
+  {
+    id: "hard",
+    name: "Hard",
+    blurb: "Very fast, twitchy.",
+    stats: {
+      maxSpeed: 400,
+      minSpeed: 80,
+      accel: 360,
+      brake: 500,
+      coast: 110,
+      steerAcc: 5200,
+      latDrag: 2.8,
+      maxLat: 1250,
+    },
+  },
+];
 
 const FOG: [number, number, number] = [8, 11, 22];
 
@@ -84,6 +140,45 @@ function getBestServerSnapshot() {
   return 0;
 }
 
+const DIFF_KEY = "plarena.corridorRun.difficulty";
+
+let diffCache = "medium";
+let diffLoaded = false;
+const diffListeners = new Set<() => void>();
+
+function readDiffId(): string {
+  if (!diffLoaded && typeof window !== "undefined") {
+    diffLoaded = true;
+    try {
+      const stored = window.localStorage.getItem(DIFF_KEY);
+      if (stored && DIFFICULTIES.some((d) => d.id === stored)) diffCache = stored;
+    } catch {
+      // storage unavailable
+    }
+  }
+  return diffCache;
+}
+
+function writeDiffId(id: string) {
+  diffCache = id;
+  diffLoaded = true;
+  try {
+    window.localStorage.setItem(DIFF_KEY, id);
+  } catch {
+    // storage unavailable
+  }
+  diffListeners.forEach((listener) => listener());
+}
+
+function subscribeDiff(callback: () => void) {
+  diffListeners.add(callback);
+  return () => diffListeners.delete(callback);
+}
+
+function getDiffServerSnapshot() {
+  return "medium";
+}
+
 const SLICE_DEPTHS = (() => {
   const arr: number[] = [];
   const ratio = FAR / NEAR;
@@ -110,10 +205,11 @@ interface GameState {
   time: number;
   shake: number;
   flash: number;
+  stats: DiffStats;
   stars: { x: number; y: number; r: number }[];
 }
 
-function makeState(): GameState {
+function makeState(stats: DiffStats = DIFFICULTIES[1].stats): GameState {
   return {
     dist: 0,
     lateral: curveX(0),
@@ -123,6 +219,7 @@ function makeState(): GameState {
     time: 0,
     shake: 0,
     flash: 0,
+    stats,
     stars: Array.from({ length: 90 }, () => ({
       x: Math.random() * W,
       y: Math.random() * CY,
@@ -153,6 +250,12 @@ export default function CorridorRun() {
   const [result, setResult] = useState<Result>(null);
   const [timeMs, setTimeMs] = useState(0);
   const best = useSyncExternalStore(subscribeBest, readBest, getBestServerSnapshot);
+  const diffId = useSyncExternalStore(subscribeDiff, readDiffId, getDiffServerSnapshot);
+  const difficulty = DIFFICULTIES.find((d) => d.id === diffId) ?? DIFFICULTIES[1];
+  const diffRef = useRef(difficulty);
+  useEffect(() => {
+    diffRef.current = difficulty;
+  }, [difficulty]);
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -160,7 +263,7 @@ export default function CorridorRun() {
   }, []);
 
   const startGame = useCallback(() => {
-    gameRef.current = makeState();
+    gameRef.current = makeState(diffRef.current.stats);
     setResult(null);
     setTimeMs(0);
     setPhaseBoth("playing");
@@ -230,13 +333,14 @@ export default function CorridorRun() {
       raf = requestAnimationFrame(loop);
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
-      if (!gameRef.current) gameRef.current = makeState();
+      if (!gameRef.current) gameRef.current = makeState(diffRef.current.stats);
       const g = gameRef.current;
       const current = phaseRef.current;
 
       if (current === "playing") {
         update(g, dt, keysRef.current, finish);
-        engineUpdate((g.speed - MIN_SPEED) / (MAX_SPEED - MIN_SPEED));
+        const st = g.stats;
+        engineUpdate((g.speed - st.minSpeed) / (st.maxSpeed - st.minSpeed));
       } else if (current === "menu") {
         updateAttract(g, dt);
         engineStop();
@@ -292,6 +396,7 @@ export default function CorridorRun() {
                 touch a wall and it&apos;s over.
               </p>
               <Controls />
+              <DifficultyPicker difficulty={difficulty} onSelect={writeDiffId} />
               <StartButton onClick={startGame}>Start Engine</StartButton>
             </Overlay>
           )}
@@ -360,6 +465,43 @@ function Controls() {
   );
 }
 
+function DifficultyPicker({
+  difficulty,
+  onSelect,
+}: {
+  difficulty: Difficulty;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="flex w-full max-w-md gap-2">
+      {DIFFICULTIES.map((d) => {
+        const active = d.id === difficulty.id;
+        return (
+          <button
+            key={d.id}
+            type="button"
+            onClick={() => onSelect(d.id)}
+            className={`flex-1 rounded-xl border px-3 py-2 text-left transition-colors ${
+              active
+                ? "border-zinc-400 bg-white/10"
+                : "border-zinc-700 hover:border-zinc-500 hover:bg-white/5"
+            }`}
+          >
+            <span
+              className={`block text-xs font-semibold ${active ? "text-zinc-100" : "text-zinc-300"}`}
+            >
+              {d.name}
+            </span>
+            <span className="mt-0.5 block text-[10px] leading-tight text-zinc-500">
+              {d.blurb}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function StartButton({
   children,
   onClick,
@@ -397,22 +539,24 @@ function update(
   g.shake = Math.max(0, g.shake - dt * 30);
   g.flash = Math.max(0, g.flash - dt * 2.2);
 
+  const st = g.stats;
+
   let steer = 0;
   if (keys.has("arrowleft") || keys.has("a")) steer -= 1;
   if (keys.has("arrowright") || keys.has("d")) steer += 1;
 
   if (keys.has("arrowup") || keys.has("w")) {
-    g.speed = Math.min(MAX_SPEED, g.speed + ACCEL * dt);
+    g.speed = Math.min(st.maxSpeed, g.speed + st.accel * dt);
   } else if (keys.has("arrowdown") || keys.has("s")) {
-    g.speed = Math.max(MIN_SPEED, g.speed - BRAKE * dt);
+    g.speed = Math.max(st.minSpeed, g.speed - st.brake * dt);
   } else {
-    g.speed = Math.max(MIN_SPEED, g.speed - COAST * dt);
+    g.speed = Math.max(st.minSpeed, g.speed - st.coast * dt);
   }
 
-  g.latVel += steer * STEER_ACC * dt;
-  g.latVel *= Math.max(0, 1 - LAT_DRAG * dt);
-  if (g.latVel > MAX_LAT) g.latVel = MAX_LAT;
-  else if (g.latVel < -MAX_LAT) g.latVel = -MAX_LAT;
+  g.latVel += steer * st.steerAcc * dt;
+  g.latVel *= Math.max(0, 1 - st.latDrag * dt);
+  if (g.latVel > st.maxLat) g.latVel = st.maxLat;
+  else if (g.latVel < -st.maxLat) g.latVel = -st.maxLat;
   g.lateral += g.latVel * dt;
 
   g.dist += g.speed * dt;
@@ -642,7 +786,7 @@ function drawFinishGate(ctx: CanvasRenderingContext2D, g: GameState) {
 }
 
 function drawSpeedLines(ctx: CanvasRenderingContext2D, g: GameState) {
-  const intensity = Math.max(0, (g.speed - 170) / (MAX_SPEED - 170));
+  const intensity = Math.max(0, (g.speed - 170) / (g.stats.maxSpeed - 170));
   if (intensity <= 0) return;
   ctx.save();
   ctx.strokeStyle = `rgba(165, 243, 252, ${0.18 * intensity})`;
@@ -662,7 +806,7 @@ function drawSpeedLines(ctx: CanvasRenderingContext2D, g: GameState) {
 
 function drawCockpit(ctx: CanvasRenderingContext2D, g: GameState) {
   const dashTop = H * 0.72;
-  const steer = Math.max(-1, Math.min(1, g.latVel / MAX_LAT));
+  const steer = Math.max(-1, Math.min(1, g.latVel / g.stats.maxLat));
 
   ctx.save();
 
@@ -731,7 +875,7 @@ function drawSpeedo(ctx: CanvasRenderingContext2D, g: GameState) {
   const r = 96;
   const start = Math.PI * 1.12;
   const end = Math.PI * 1.88;
-  const frac = Math.max(0, Math.min(1, g.speed / MAX_SPEED));
+  const frac = Math.max(0, Math.min(1, g.speed / g.stats.maxSpeed));
 
   ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
   ctx.lineWidth = 10;
