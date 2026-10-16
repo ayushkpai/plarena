@@ -15,6 +15,13 @@ const games = [
     accent: "group-hover:border-fuchsia-400 dark:group-hover:border-fuchsia-500",
     arrow: "group-hover:text-fuchsia-400",
   },
+  {
+    href: "/games/corridor-run",
+    name: "Corridor Run",
+    description: "Cockpit driving through a tight corridor of twists and turns.",
+    accent: "group-hover:border-emerald-400 dark:group-hover:border-emerald-500",
+    arrow: "group-hover:text-emerald-400",
+  },
 ];
 
 export default function Home() {
