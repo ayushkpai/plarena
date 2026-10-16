@@ -97,6 +97,23 @@ const DIFFICULTIES: Difficulty[] = [
       maxLat: 1250,
     },
   },
+  {
+    id: "super",
+    name: "Super",
+    blurb: "Blistering chaos.",
+    accent: "#a855f7",
+    accentDim: "rgba(168, 85, 247, 0.25)",
+    stats: {
+      maxSpeed: 1000,
+      minSpeed: 90,
+      accel: 700,
+      brake: 600,
+      coast: 140,
+      steerAcc: 6000,
+      latDrag: 1.8,
+      maxLat: 1600,
+    },
+  },
 ];
 
 const FOG: [number, number, number] = [8, 11, 22];
@@ -446,7 +463,7 @@ function DifficultyPicker({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="flex w-full max-w-md gap-2">
+    <div className="flex w-full max-w-lg gap-2">
       {DIFFICULTIES.map((d) => {
         const active = d.id === difficulty.id;
         return (
