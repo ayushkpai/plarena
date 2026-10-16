@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { sfx } from "@/lib/sound";
+import { engineStop, engineUpdate, sfx } from "@/lib/sound";
 
 type Phase = "menu" | "playing" | "paused" | "over";
 type Result = "crash" | "finish" | null;
@@ -236,18 +236,24 @@ export default function CorridorRun() {
 
       if (current === "playing") {
         update(g, dt, keysRef.current, finish);
+        engineUpdate((g.speed - MIN_SPEED) / (MAX_SPEED - MIN_SPEED));
       } else if (current === "menu") {
         updateAttract(g, dt);
+        engineStop();
       } else {
         g.shake = Math.max(0, g.shake - dt * 30);
         g.flash = Math.max(0, g.flash - dt * 2.2);
+        engineStop();
       }
 
       draw(ctx, g, dpr, now / 1000, current);
     };
 
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      engineStop();
+    };
   }, [finish]);
 
   return (

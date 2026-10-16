@@ -200,3 +200,89 @@ export const sfx = {
     );
   },
 };
+
+type Engine = {
+  osc1: OscillatorNode;
+  osc2: OscillatorNode;
+  filter: BiquadFilterNode;
+  gain: GainNode;
+  noiseSrc: AudioBufferSourceNode;
+  noiseGain: GainNode;
+};
+
+let engine: Engine | null = null;
+
+function createEngine(c: AudioContext, out: AudioNode): Engine {
+  const osc1 = c.createOscillator();
+  osc1.type = "sawtooth";
+  const osc2 = c.createOscillator();
+  osc2.type = "square";
+
+  const filter = c.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.Q.value = 6;
+
+  const gain = c.createGain();
+  gain.gain.value = 0;
+
+  const frames = Math.floor(c.sampleRate * 1);
+  const buffer = c.createBuffer(1, frames, c.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
+  const noiseSrc = c.createBufferSource();
+  noiseSrc.buffer = buffer;
+  noiseSrc.loop = true;
+  const noiseGain = c.createGain();
+  noiseGain.gain.value = 0;
+
+  osc1.connect(filter);
+  osc2.connect(filter);
+  filter.connect(gain);
+  gain.connect(out);
+  noiseSrc.connect(noiseGain);
+  noiseGain.connect(out);
+
+  osc1.start();
+  osc2.start();
+  noiseSrc.start();
+
+  return { osc1, osc2, filter, gain, noiseSrc, noiseGain };
+}
+
+export function engineUpdate(speed01: number) {
+  if (readMuted()) {
+    engineStop();
+    return;
+  }
+  const c = ensureContext();
+  if (!c || !masterGain) return;
+  if (!engine) engine = createEngine(c, masterGain);
+
+  const s = Math.max(0, Math.min(1, speed01));
+  const now = c.currentTime;
+  const base = 52 + s * 100;
+  engine.osc1.frequency.setTargetAtTime(base, now, 0.05);
+  engine.osc2.frequency.setTargetAtTime(base * 1.5, now, 0.05);
+  engine.filter.frequency.setTargetAtTime(300 + s * 1500, now, 0.06);
+  engine.gain.gain.setTargetAtTime(0.045 + s * 0.11, now, 0.08);
+  engine.noiseGain.gain.setTargetAtTime(0.008 + s * 0.03, now, 0.08);
+}
+
+export function engineStop() {
+  if (!engine) return;
+  const e = engine;
+  engine = null;
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const stopAt = now + 0.18;
+  e.gain.gain.cancelScheduledValues(now);
+  e.gain.gain.setValueAtTime(e.gain.gain.value, now);
+  e.gain.gain.linearRampToValueAtTime(0, stopAt);
+  e.noiseGain.gain.cancelScheduledValues(now);
+  e.noiseGain.gain.setValueAtTime(e.noiseGain.gain.value, now);
+  e.noiseGain.gain.linearRampToValueAtTime(0, stopAt);
+  e.osc1.stop(stopAt);
+  e.osc2.stop(stopAt);
+  e.noiseSrc.stop(stopAt);
+}
+
