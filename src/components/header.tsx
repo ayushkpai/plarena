@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getMutedServerSnapshot, readMuted, setMuted, subscribeMuted } from "@/lib/sound";
 
 const navLinks = [
   { href: "/games/space-arena", name: "Space Arena" },
@@ -16,6 +17,7 @@ export function Header() {
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const lastY = useRef(0);
+  const muted = useSyncExternalStore(subscribeMuted, readMuted, getMutedServerSnapshot);
 
   useEffect(() => {
     lastY.current = window.scrollY;
@@ -48,35 +50,62 @@ export function Header() {
             PLARENA
           </Link>
 
-          <nav className="hidden items-center gap-5 text-sm font-medium text-zinc-500 md:flex dark:text-zinc-400">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
-              >
-                {link.name}
-              </Link>
-            ))}
-          </nav>
+          <div className="flex items-center gap-1">
+            <nav className="hidden items-center gap-5 pr-3 text-sm font-medium text-zinc-500 md:flex dark:text-zinc-400">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
+                >
+                  {link.name}
+                </Link>
+              ))}
+            </nav>
 
-          <button
-            type="button"
-            aria-label={open ? "Close menu" : "Open menu"}
-            aria-expanded={open}
-            onClick={() => setOpen((v) => !v)}
-            className="-mr-2 grid h-10 w-10 place-items-center rounded-md text-zinc-700 transition-colors hover:bg-zinc-100 md:hidden dark:text-zinc-300 dark:hover:bg-zinc-900"
-          >
-            {open ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5">
-                <path d="M6 6l12 12M18 6L6 18" />
+            <button
+              type="button"
+              aria-label={muted ? "Unmute sound" : "Mute sound"}
+              aria-pressed={muted}
+              onClick={() => setMuted(!muted)}
+              className="grid h-10 w-10 place-items-center rounded-md text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5"
+              >
+                <path d="M11 5 6 9H3v6h3l5 4V5z" />
+                {muted ? (
+                  <path d="M22 9l-6 6M16 9l6 6" />
+                ) : (
+                  <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
+                )}
               </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-            )}
-          </button>
+            </button>
+
+            <button
+              type="button"
+              aria-label={open ? "Close menu" : "Open menu"}
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+              className="-mr-2 grid h-10 w-10 place-items-center rounded-md text-zinc-700 transition-colors hover:bg-zinc-100 md:hidden dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              {open ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5">
+                  <path d="M4 7h16M4 12h16M4 17h16" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 

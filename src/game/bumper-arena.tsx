@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sfx } from "@/lib/sound";
 
 type Phase = "menu" | "playing" | "paused" | "gameover";
 type Mode = "solo" | "duo";
 type Winner = "p1" | "p2" | null;
+
+let lastSpikeSfx = 0;
 
 const W = 960;
 const H = 600;
@@ -167,6 +170,7 @@ export default function BumperArena() {
       setWinner(null);
       gameRef.current = makeState();
       setPhaseBoth("playing");
+      sfx.start();
     },
     [setPhaseBoth],
   );
@@ -175,6 +179,8 @@ export default function BumperArena() {
     (w: Winner) => {
       setWinner(w);
       setPhaseBoth("gameover");
+      if (modeRef.current === "solo" && w === "p2") sfx.lose();
+      else sfx.win();
     },
     [setPhaseBoth],
   );
@@ -393,6 +399,7 @@ function update(
 ) {
   g.shake = Math.max(0, g.shake - dt * 40);
   g.countdown = Math.max(0, g.countdown - dt);
+  if (g.countdown + dt > 0.8 && g.countdown <= 0.8) sfx.go();
   const frozen = g.countdown > 0;
 
   g.hazards.forEach((h) => (h.rot += h.rotSpeed * dt));
@@ -441,6 +448,11 @@ function update(
         if (!frozen) {
           orb.hp = Math.max(0, orb.hp - HAZARD_DPS * dt);
           g.shake = Math.max(g.shake, 4);
+          const now = performance.now();
+          if (now - lastSpikeSfx > 140) {
+            lastSpikeSfx = now;
+            sfx.hit();
+          }
           if (Math.random() < 0.5) {
             burst(g.particles, orb.x, orb.y, 2, ["#f97316", "#facc15", "#ffffff"], 180);
           }
@@ -559,6 +571,7 @@ function collideOrbs(g: GameState) {
   if (impact > 40) {
     const mx = (a.x + b.x) / 2;
     const my = (a.y + b.y) / 2;
+    sfx.bump(impact);
     burst(g.particles, mx, my, Math.min(20, Math.floor(impact / 12)), ["#ffffff", "#e2e8f0", "#fde68a"], impact * 1.6);
     g.shake = Math.max(g.shake, Math.min(12, impact / 30));
   }

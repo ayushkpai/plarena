@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { sfx } from "@/lib/sound";
 
 type Phase = "menu" | "playing" | "paused" | "gameover";
 
@@ -248,6 +249,7 @@ export default function SpaceArena() {
     gameRef.current = makeState();
     setFinalScore(0);
     setPhaseBoth("playing");
+    sfx.start();
   }, [setPhaseBoth]);
 
   const endGame = useCallback(() => {
@@ -257,6 +259,7 @@ export default function SpaceArena() {
     setFinalScore(score);
     if (score > readBest()) writeBest(score);
     setPhaseBoth("gameover");
+    sfx.lose();
   }, [setPhaseBoth]);
 
   useEffect(() => {
@@ -615,9 +618,11 @@ function update(
       a.vy *= -0.6;
       if (s.lives <= 0) {
         burst(g.particles, s.x, s.y, 60, ["#67e8f9", "#818cf8", "#ffffff"], 420);
+        sfx.explode();
         onDeath();
         return;
       }
+      sfx.hit();
     }
   }
 
@@ -628,6 +633,7 @@ function update(
       g.orbs.splice(i, 1);
       g.orbTimer = 0.5;
       g.score += 25;
+      sfx.pickup();
       burst(g.particles, o.x, o.y, 16, ["#67e8f9", "#a5f3fc", "#ffffff"], 220);
     }
   }

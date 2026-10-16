@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { sfx } from "@/lib/sound";
 
 type Phase = "menu" | "playing" | "paused" | "over";
 
@@ -228,6 +229,7 @@ export default function MissileCommand() {
     setScore(0);
     setWave(1);
     setPhaseBoth("playing");
+    sfx.start();
   }, [setPhaseBoth]);
 
   useEffect(() => {
@@ -274,6 +276,7 @@ export default function MissileCommand() {
             setScore(Math.floor(g.score));
             if (Math.floor(g.score) > readBest()) writeBest(Math.floor(g.score));
             setPhaseBoth("over");
+            sfx.lose();
           },
         );
       } else if (current === "menu") {
@@ -459,6 +462,7 @@ function fire(g: GameState, x: number, y: number) {
   if (!base) return;
   base.ammo -= 1;
   base.flash = 0.2;
+  sfx.shoot();
   const sx = base.x;
   const sy = GROUND_Y - 12;
   const tx = Math.max(12, Math.min(W - 12, x));
@@ -590,6 +594,7 @@ function update(
         alive: true,
       });
       g.shake = Math.max(g.shake, 3);
+      sfx.explode();
     }
   }
 
@@ -609,6 +614,7 @@ function update(
       if (Math.hypot(m.x - e.x, m.y - e.y) < r) {
         m.alive = false;
         g.score += 25;
+        sfx.pickup();
         burst(g.particles, m.x, m.y, 12, ["#fda4af", "#fecdd3", "#f87171"], 220);
       }
     }
@@ -635,6 +641,7 @@ function update(
       g.wave += 1;
       setupWave(g);
       onWave();
+      sfx.wave();
     }
   } else {
     g.waveClearTimer = 0;
@@ -653,6 +660,7 @@ function groundImpact(g: GameState, x: number, y: number) {
     alive: true,
   });
   burst(g.particles, x, y, 30, ["#f97316", "#fbbf24", "#f87171"], 320);
+  sfx.explode();
   for (const c of g.cities) {
     if (c.alive && Math.abs(c.x - x) < BLAST_RADIUS) c.alive = false;
   }

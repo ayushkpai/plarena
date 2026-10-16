@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { sfx } from "@/lib/sound";
 
 type Phase = "menu" | "playing" | "paused" | "over";
 type Result = "crash" | "finish" | null;
@@ -163,6 +164,7 @@ export default function CorridorRun() {
     setResult(null);
     setTimeMs(0);
     setPhaseBoth("playing");
+    sfx.start();
   }, [setPhaseBoth]);
 
   const finish = useCallback(
@@ -174,6 +176,8 @@ export default function CorridorRun() {
         writeBest(ms);
       }
       setPhaseBoth("over");
+      if (r === "finish") sfx.win();
+      else sfx.crash();
     },
     [setPhaseBoth],
   );
