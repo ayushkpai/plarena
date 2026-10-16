@@ -22,6 +22,13 @@ const games = [
     accent: "group-hover:border-emerald-400 dark:group-hover:border-emerald-500",
     arrow: "group-hover:text-emerald-400",
   },
+  {
+    href: "/games/missile-command",
+    name: "Missile Command",
+    description: "Launch interceptors and defend your cities from the missile rain.",
+    accent: "group-hover:border-amber-400 dark:group-hover:border-amber-500",
+    arrow: "group-hover:text-amber-400",
+  },
 ];
 
 export default function Home() {
