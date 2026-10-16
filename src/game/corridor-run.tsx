@@ -127,29 +127,42 @@ const rand = (min: number, max: number) => min + Math.random() * (max - min);
 
 const BEST_KEY = "plarena.corridorRun.best";
 
-let bestCache = 0;
+const EMPTY_BEST: Record<string, number> = {};
+
+let bestCache: Record<string, number> = EMPTY_BEST;
 let bestLoaded = false;
 const bestListeners = new Set<() => void>();
 
-function readBest() {
+function readBest(id: string) {
   if (!bestLoaded && typeof window !== "undefined") {
     bestLoaded = true;
     try {
       const stored = window.localStorage.getItem(BEST_KEY);
-      const n = stored ? Number(stored) : 0;
-      if (Number.isFinite(n)) bestCache = n;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed === "number" && Number.isFinite(parsed) && parsed > 0) {
+          bestCache = { medium: parsed };
+        } else if (parsed && typeof parsed === "object") {
+          const next: Record<string, number> = {};
+          for (const key of Object.keys(parsed)) {
+            const v = parsed[key];
+            if (typeof v === "number" && Number.isFinite(v) && v > 0) next[key] = v;
+          }
+          bestCache = next;
+        }
+      }
     } catch {
-      bestCache = 0;
+      bestCache = EMPTY_BEST;
     }
   }
-  return bestCache;
+  return bestCache[id] ?? 0;
 }
 
-function writeBest(value: number) {
-  bestCache = value;
+function writeBest(id: string, value: number) {
+  bestCache = { ...bestCache, [id]: value };
   bestLoaded = true;
   try {
-    window.localStorage.setItem(BEST_KEY, String(value));
+    window.localStorage.setItem(BEST_KEY, JSON.stringify(bestCache));
   } catch {
     // storage unavailable
   }
@@ -239,9 +252,10 @@ export default function CorridorRun() {
   const [phase, setPhase] = useState<Phase>("menu");
   const [result, setResult] = useState<Result>(null);
   const [timeMs, setTimeMs] = useState(0);
-  const best = useSyncExternalStore(subscribeBest, readBest, getBestServerSnapshot);
   const [diffId, setDiffId] = useState("medium");
   const difficulty = DIFFICULTIES.find((d) => d.id === diffId) ?? DIFFICULTIES[1];
+  const readBestForDiff = useCallback(() => readBest(diffId), [diffId]);
+  const best = useSyncExternalStore(subscribeBest, readBestForDiff, getBestServerSnapshot);
   const diffRef = useRef(difficulty);
   useEffect(() => {
     diffRef.current = difficulty;
@@ -265,8 +279,8 @@ export default function CorridorRun() {
       setResult(r);
       const ms = Math.round(elapsed * 1000);
       setTimeMs(ms);
-      if (r === "finish" && (readBest() === 0 || ms < readBest())) {
-        writeBest(ms);
+      if (r === "finish" && (readBest(diffRef.current.id) === 0 || ms < readBest(diffRef.current.id))) {
+        writeBest(diffRef.current.id, ms);
       }
       setPhaseBoth("over");
       if (r === "finish") sfx.win();
