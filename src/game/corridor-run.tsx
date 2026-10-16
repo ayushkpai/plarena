@@ -40,6 +40,8 @@ interface Difficulty {
   id: string;
   name: string;
   blurb: string;
+  accent: string;
+  accentDim: string;
   stats: DiffStats;
 }
 
@@ -48,6 +50,8 @@ const DIFFICULTIES: Difficulty[] = [
     id: "easy",
     name: "Easy",
     blurb: "Slow and steady.",
+    accent: "#34d399",
+    accentDim: "rgba(52, 211, 153, 0.25)",
     stats: {
       maxSpeed: 200,
       minSpeed: 70,
@@ -63,6 +67,8 @@ const DIFFICULTIES: Difficulty[] = [
     id: "medium",
     name: "Medium",
     blurb: "Fast but forgiving.",
+    accent: "#38bdf8",
+    accentDim: "rgba(56, 189, 248, 0.25)",
     stats: {
       maxSpeed: 300,
       minSpeed: 70,
@@ -78,6 +84,8 @@ const DIFFICULTIES: Difficulty[] = [
     id: "hard",
     name: "Hard",
     blurb: "Very fast, twitchy.",
+    accent: "#fb7185",
+    accentDim: "rgba(251, 113, 133, 0.25)",
     stats: {
       maxSpeed: 400,
       minSpeed: 80,
@@ -206,10 +214,12 @@ interface GameState {
   shake: number;
   flash: number;
   stats: DiffStats;
+  accent: string;
+  accentDim: string;
   stars: { x: number; y: number; r: number }[];
 }
 
-function makeState(stats: DiffStats = DIFFICULTIES[1].stats): GameState {
+function makeState(difficulty: Difficulty = DIFFICULTIES[1]): GameState {
   return {
     dist: 0,
     lateral: curveX(0),
@@ -219,7 +229,9 @@ function makeState(stats: DiffStats = DIFFICULTIES[1].stats): GameState {
     time: 0,
     shake: 0,
     flash: 0,
-    stats,
+    stats: difficulty.stats,
+    accent: difficulty.accent,
+    accentDim: difficulty.accentDim,
     stars: Array.from({ length: 90 }, () => ({
       x: Math.random() * W,
       y: Math.random() * CY,
@@ -263,7 +275,7 @@ export default function CorridorRun() {
   }, []);
 
   const startGame = useCallback(() => {
-    gameRef.current = makeState(diffRef.current.stats);
+    gameRef.current = makeState(diffRef.current);
     setResult(null);
     setTimeMs(0);
     setPhaseBoth("playing");
@@ -333,7 +345,7 @@ export default function CorridorRun() {
       raf = requestAnimationFrame(loop);
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
-      if (!gameRef.current) gameRef.current = makeState(diffRef.current.stats);
+      if (!gameRef.current) gameRef.current = makeState(diffRef.current);
       const g = gameRef.current;
       const current = phaseRef.current;
 
@@ -481,18 +493,25 @@ function DifficultyPicker({
             key={d.id}
             type="button"
             onClick={() => onSelect(d.id)}
+            style={active ? { borderColor: d.accent } : undefined}
             className={`flex-1 rounded-xl border px-3 py-2 text-left transition-colors ${
               active
-                ? "border-zinc-400 bg-white/10"
+                ? "bg-white/10"
                 : "border-zinc-700 hover:border-zinc-500 hover:bg-white/5"
             }`}
           >
-            <span
-              className={`block text-xs font-semibold ${active ? "text-zinc-100" : "text-zinc-300"}`}
-            >
-              {d.name}
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ background: d.accent }}
+              />
+              <span
+                className={`text-xs font-semibold ${active ? "text-zinc-100" : "text-zinc-300"}`}
+              >
+                {d.name}
+              </span>
             </span>
-            <span className="mt-0.5 block text-[10px] leading-tight text-zinc-500">
+            <span className="mt-1 block text-[10px] leading-tight text-zinc-500">
               {d.blurb}
             </span>
           </button>
@@ -823,7 +842,7 @@ function drawCockpit(ctx: CanvasRenderingContext2D, g: GameState) {
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(56, 189, 248, 0.25)";
+  ctx.strokeStyle = g.accentDim;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, dashTop + 26);
@@ -884,7 +903,7 @@ function drawSpeedo(ctx: CanvasRenderingContext2D, g: GameState) {
   ctx.stroke();
 
   const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
-  grad.addColorStop(0, "#22d3ee");
+  grad.addColorStop(0, g.accent);
   grad.addColorStop(1, "#f43f5e");
   ctx.strokeStyle = grad;
   ctx.lineWidth = 10;
@@ -927,7 +946,7 @@ function drawHud(ctx: CanvasRenderingContext2D, g: GameState) {
   ctx.fillRect(24, 52, barW, 6);
   const prog = Math.max(0, Math.min(1, g.dist / TRACK_LENGTH));
   const pgrad = ctx.createLinearGradient(24, 0, 24 + barW, 0);
-  pgrad.addColorStop(0, "#34d399");
+  pgrad.addColorStop(0, g.accent);
   pgrad.addColorStop(1, "#22d3ee");
   ctx.fillStyle = pgrad;
   ctx.fillRect(24, 52, barW * prog, 6);
