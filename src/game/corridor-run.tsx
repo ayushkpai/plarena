@@ -148,45 +148,6 @@ function getBestServerSnapshot() {
   return 0;
 }
 
-const DIFF_KEY = "plarena.corridorRun.difficulty";
-
-let diffCache = "medium";
-let diffLoaded = false;
-const diffListeners = new Set<() => void>();
-
-function readDiffId(): string {
-  if (!diffLoaded && typeof window !== "undefined") {
-    diffLoaded = true;
-    try {
-      const stored = window.localStorage.getItem(DIFF_KEY);
-      if (stored && DIFFICULTIES.some((d) => d.id === stored)) diffCache = stored;
-    } catch {
-      // storage unavailable
-    }
-  }
-  return diffCache;
-}
-
-function writeDiffId(id: string) {
-  diffCache = id;
-  diffLoaded = true;
-  try {
-    window.localStorage.setItem(DIFF_KEY, id);
-  } catch {
-    // storage unavailable
-  }
-  diffListeners.forEach((listener) => listener());
-}
-
-function subscribeDiff(callback: () => void) {
-  diffListeners.add(callback);
-  return () => diffListeners.delete(callback);
-}
-
-function getDiffServerSnapshot() {
-  return "medium";
-}
-
 const SLICE_DEPTHS = (() => {
   const arr: number[] = [];
   const ratio = FAR / NEAR;
@@ -262,7 +223,7 @@ export default function CorridorRun() {
   const [result, setResult] = useState<Result>(null);
   const [timeMs, setTimeMs] = useState(0);
   const best = useSyncExternalStore(subscribeBest, readBest, getBestServerSnapshot);
-  const diffId = useSyncExternalStore(subscribeDiff, readDiffId, getDiffServerSnapshot);
+  const [diffId, setDiffId] = useState("medium");
   const difficulty = DIFFICULTIES.find((d) => d.id === diffId) ?? DIFFICULTIES[1];
   const diffRef = useRef(difficulty);
   useEffect(() => {
@@ -408,7 +369,7 @@ export default function CorridorRun() {
                 touch a wall and it&apos;s over.
               </p>
               <Controls />
-              <DifficultyPicker difficulty={difficulty} onSelect={writeDiffId} />
+              <DifficultyPicker difficulty={difficulty} onSelect={setDiffId} />
               <StartButton onClick={startGame}>Start Engine</StartButton>
             </Overlay>
           )}
