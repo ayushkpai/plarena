@@ -700,7 +700,7 @@ function update(
 
   if (mission.kind === "wind") {
     g.windPhase += dt;
-    g.wind = Math.sin(g.windPhase * 0.6) * 34 + Math.sin(g.windPhase * 1.7) * 16;
+    g.wind = Math.sin(g.windPhase * 0.45) * 16 + Math.sin(g.windPhase * 1.1) * 7;
   } else {
     g.wind = 0;
   }
@@ -1092,7 +1092,7 @@ function drawHud(ctx: CanvasRenderingContext2D, g: GameState) {
     ctx.fillText("TIME LEFT", W / 2, 96);
   } else if (g.mission.kind === "wind") {
     const dir = g.wind >= 0 ? 1 : -1;
-    const mag = clamp(Math.abs(g.wind) / 44, 0.25, 1);
+    const mag = clamp(Math.abs(g.wind) / 24, 0.25, 1);
     const len = 24 + mag * 44;
     const cy = 76;
     ctx.strokeStyle = g.mission.accent;
