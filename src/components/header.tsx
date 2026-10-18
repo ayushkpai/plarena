@@ -10,6 +10,7 @@ const navLinks = [
   { href: "/games/bumper-arena", name: "Bumper Arena" },
   { href: "/games/corridor-run", name: "Corridor Run" },
   { href: "/games/missile-command", name: "Missile Command" },
+  { href: "/games/lunar-lander", name: "Lunar Lander" },
 ];
 
 export function Header() {

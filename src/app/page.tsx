@@ -29,6 +29,13 @@ const games = [
     accent: "group-hover:border-amber-400 dark:group-hover:border-amber-500",
     arrow: "group-hover:text-amber-400",
   },
+  {
+    href: "/games/lunar-lander",
+    name: "Lunar Lander",
+    description: "Guide your lander to a lit pad: manage fuel, gravity and thrust.",
+    accent: "group-hover:border-sky-400 dark:group-hover:border-sky-500",
+    arrow: "group-hover:text-sky-400",
+  },
 ];
 
 export default function Home() {
