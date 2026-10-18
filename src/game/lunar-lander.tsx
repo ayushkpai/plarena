@@ -9,14 +9,14 @@ type Phase = "menu" | "playing" | "paused" | "gameover";
 const W = 960;
 const H = 600;
 
-const GRAVITY = 64;
-const THRUST = 170;
-const ROT_SPEED = 3.4;
-const FUEL_MAX = 105;
-const FUEL_RATE = 10.5;
-const MAX_LAND_VX = 34;
-const MAX_LAND_VY = 48;
-const MAX_LAND_ANGLE = 0.3;
+const GRAVITY = 42;
+const THRUST = 190;
+const ROT_SPEED = 4;
+const FUEL_MAX = 155;
+const FUEL_RATE = 8;
+const MAX_LAND_VX = 58;
+const MAX_LAND_VY = 74;
+const MAX_LAND_ANGLE = 0.5;
 const LEG_DROP = 14;
 const START_LIVES = 3;
 const STEP_X = 20;
@@ -148,8 +148,8 @@ function makeTerrain(level: number): Terrain {
   }
 
   const pads: Pad[] = [];
-  const padCount = Math.max(2, 4 - Math.floor((level - 1) / 3));
-  const pw = Math.max(52, 100 - (level - 1) * 6);
+  const padCount = Math.max(3, 4 - Math.floor((level - 1) / 4));
+  const pw = Math.max(80, 130 - (level - 1) * 7);
   const span = (W - 200) / padCount;
   for (let i = 0; i < padCount; i++) {
     const cx = rand(100 + i * span + pw / 2, 100 + (i + 1) * span - pw / 2);
@@ -179,11 +179,11 @@ function surfaceAt(terrain: Terrain, x: number): { y: number; pad: boolean } {
 function makeState(): GameState {
   return {
     lander: {
-      x: rand(W * 0.35, W * 0.65),
+      x: rand(W * 0.4, W * 0.6),
       y: 54,
-      vx: rand(-40, 40),
+      vx: rand(-22, 22),
       vy: 0,
-      angle: rand(-0.4, 0.4),
+      angle: rand(-0.25, 0.25),
       thrusting: false,
     },
     terrain: makeTerrain(1),
@@ -202,11 +202,11 @@ function makeState(): GameState {
 function spawnLevel(g: GameState, level: number) {
   g.level = level;
   g.terrain = makeTerrain(level);
-  g.lander.x = rand(W * 0.35, W * 0.65);
+  g.lander.x = rand(W * 0.4, W * 0.6);
   g.lander.y = 54;
-  g.lander.vx = rand(-40, 40);
+  g.lander.vx = rand(-22, 22);
   g.lander.vy = 0;
-  g.lander.angle = rand(-0.4, 0.4);
+  g.lander.angle = rand(-0.25, 0.25);
   g.lander.thrusting = false;
   g.fuel = FUEL_MAX;
 }
