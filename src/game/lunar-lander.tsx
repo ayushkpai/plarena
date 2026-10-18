@@ -76,6 +76,7 @@ interface TerrainPoint {
 }
 
 interface Pad {
+  id: number;
   x: number;
   w: number;
   y: number;
@@ -111,6 +112,33 @@ interface Message {
   timer: number;
 }
 
+type MissionKind =
+  | "precision"
+  | "fuel"
+  | "timed"
+  | "wind"
+  | "cargo"
+  | "multi"
+  | "hazard";
+
+interface Mission {
+  kind: MissionKind;
+  name: string;
+  brief: string;
+  accent: string;
+}
+
+interface Debris {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  rot: number;
+  rotSpeed: number;
+  verts: { a: number; d: number }[];
+}
+
 interface GameState {
   lander: Lander;
   terrain: Terrain;
@@ -123,6 +151,74 @@ interface GameState {
   shake: number;
   message: Message | null;
   pointer: { active: boolean; x: number; y: number };
+  mission: Mission;
+  targets: number[];
+  stage: number;
+  timeLeft: number;
+  wind: number;
+  windPhase: number;
+  cargo: boolean;
+  hazards: Debris[];
+  hazardTimer: number;
+}
+
+const MISSIONS: Record<MissionKind, Mission> = {
+  precision: {
+    kind: "precision",
+    name: "Precision Drop",
+    brief: "Land on the marked pad.",
+    accent: "#f59e0b",
+  },
+  fuel: {
+    kind: "fuel",
+    name: "Low Fuel",
+    brief: "Make it down on the little fuel you have.",
+    accent: "#f43f5e",
+  },
+  timed: {
+    kind: "timed",
+    name: "Time Critical",
+    brief: "Touch down before the clock runs out.",
+    accent: "#a855f7",
+  },
+  wind: {
+    kind: "wind",
+    name: "Crosswind",
+    brief: "Fight the shifting crosswind as you descend.",
+    accent: "#38bdf8",
+  },
+  cargo: {
+    kind: "cargo",
+    name: "Fragile Cargo",
+    brief: "Land extra gently — the payload is fragile.",
+    accent: "#22c55e",
+  },
+  multi: {
+    kind: "multi",
+    name: "Two-Stop Delivery",
+    brief: "Land on each marked pad in turn.",
+    accent: "#ec4899",
+  },
+  hazard: {
+    kind: "hazard",
+    name: "Debris Field",
+    brief: "Dodge the falling debris, then land.",
+    accent: "#fb923c",
+  },
+};
+
+const MISSION_ORDER: MissionKind[] = [
+  "precision",
+  "fuel",
+  "timed",
+  "wind",
+  "cargo",
+  "multi",
+  "hazard",
+];
+
+function missionKindForLevel(level: number): MissionKind {
+  return MISSION_ORDER[(level - 1) % MISSION_ORDER.length];
 }
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
@@ -158,32 +254,69 @@ function makeTerrain(level: number): Terrain {
     for (const p of points) {
       if (p.x >= cx - half && p.x <= cx + half) p.y = padY;
     }
-    pads.push({ x: cx, w: pw, y: padY });
+    pads.push({ id: i, x: cx, w: pw, y: padY });
   }
   return { points, pads };
 }
 
-function surfaceAt(terrain: Terrain, x: number): { y: number; pad: boolean } {
+function surfaceAt(terrain: Terrain, x: number): { y: number; padId: number } {
   for (const pad of terrain.pads) {
     if (x >= pad.x - pad.w / 2 && x <= pad.x + pad.w / 2) {
-      return { y: pad.y, pad: true };
+      return { y: pad.y, padId: pad.id };
     }
   }
   const idx = clamp(Math.floor(x / STEP_X), 0, terrain.points.length - 2);
   const p0 = terrain.points[idx];
   const p1 = terrain.points[idx + 1];
   const t = p1.x === p0.x ? 0 : (x - p0.x) / (p1.x - p0.x);
-  return { y: p0.y + (p1.y - p0.y) * t, pad: false };
+  return { y: p0.y + (p1.y - p0.y) * t, padId: -1 };
+}
+
+function respawnLander(g: GameState) {
+  g.lander.x = rand(W * 0.4, W * 0.6);
+  g.lander.y = 54;
+  g.lander.vx = rand(-22, 22);
+  g.lander.vy = 0;
+  g.lander.angle = rand(-0.25, 0.25);
+  g.lander.thrusting = false;
+  g.fuel = g.mission.kind === "fuel" ? FUEL_MAX * 0.45 : FUEL_MAX;
+  g.pointer.active = false;
+}
+
+function spawnLevel(g: GameState, level: number) {
+  g.level = level;
+  g.terrain = makeTerrain(level);
+  g.mission = MISSIONS[missionKindForLevel(level)];
+  g.stage = 0;
+  g.cargo = g.mission.kind === "cargo";
+  g.wind = 0;
+  g.windPhase = 0;
+  g.hazards = [];
+  g.hazardTimer = 1;
+
+  const pads = g.terrain.pads;
+  g.targets = pads.map((p) => p.id);
+
+  if (g.mission.kind === "precision") {
+    const target = pads[Math.floor(rand(0, pads.length))];
+    target.w = Math.max(56, target.w * 0.5);
+    g.targets = [target.id];
+  } else if (g.mission.kind === "multi" && pads.length >= 2) {
+    g.targets = [pads[0].id, pads[1].id];
+  }
+
+  g.timeLeft = g.mission.kind === "timed" ? 24 : 0;
+  respawnLander(g);
 }
 
 function makeState(): GameState {
-  return {
+  const g: GameState = {
     lander: {
-      x: rand(W * 0.4, W * 0.6),
+      x: W / 2,
       y: 54,
-      vx: rand(-22, 22),
+      vx: 0,
       vy: 0,
-      angle: rand(-0.25, 0.25),
+      angle: 0,
       thrusting: false,
     },
     terrain: makeTerrain(1),
@@ -196,19 +329,18 @@ function makeState(): GameState {
     shake: 0,
     message: null,
     pointer: { active: false, x: W / 2, y: H / 2 },
+    mission: MISSIONS.precision,
+    targets: [],
+    stage: 0,
+    timeLeft: 0,
+    wind: 0,
+    windPhase: 0,
+    cargo: false,
+    hazards: [],
+    hazardTimer: 1,
   };
-}
-
-function spawnLevel(g: GameState, level: number) {
-  g.level = level;
-  g.terrain = makeTerrain(level);
-  g.lander.x = rand(W * 0.4, W * 0.6);
-  g.lander.y = 54;
-  g.lander.vx = rand(-22, 22);
-  g.lander.vy = 0;
-  g.lander.angle = rand(-0.25, 0.25);
-  g.lander.thrusting = false;
-  g.fuel = FUEL_MAX;
+  spawnLevel(g, 1);
+  return g;
 }
 
 function burst(
@@ -235,6 +367,39 @@ function burst(
   }
 }
 
+function makeDebris(): Debris {
+  const r = rand(10, 22);
+  const vertCount = Math.floor(rand(7, 11));
+  return {
+    x: rand(0, W),
+    y: -r,
+    vx: rand(-30, 30),
+    vy: rand(70, 150),
+    r,
+    rot: rand(0, Math.PI * 2),
+    rotSpeed: rand(-2, 2),
+    verts: Array.from({ length: vertCount }, (_, i) => ({
+      a: (i / vertCount) * Math.PI * 2,
+      d: rand(0.7, 1),
+    })),
+  };
+}
+
+function crash(g: GameState, onGameOver: () => void, text: string): boolean {
+  const l = g.lander;
+  burst(g.particles, l.x, l.y + LEG_DROP, 44, ["#fb7185", "#f59e0b", "#fde68a", "#ffffff"], 420);
+  g.shake = 18;
+  g.lives -= 1;
+  sfx.explode();
+  if (g.lives <= 0) {
+    onGameOver();
+    return true;
+  }
+  g.message = { text, color: "#fb7185", timer: 1.4 };
+  spawnLevel(g, g.level);
+  return false;
+}
+
 export default function LunarLander() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const phaseRef = useRef<Phase>("menu");
@@ -243,6 +408,7 @@ export default function LunarLander() {
 
   const [phase, setPhase] = useState<Phase>("menu");
   const [finalScore, setFinalScore] = useState(0);
+  const [finalLevel, setFinalLevel] = useState(1);
   const best = useSyncExternalStore(subscribeBest, readBest, getBestServerSnapshot);
 
   const setPhaseBoth = useCallback((p: Phase) => {
@@ -253,6 +419,7 @@ export default function LunarLander() {
   const startGame = useCallback(() => {
     gameRef.current = makeState();
     setFinalScore(0);
+    setFinalLevel(1);
     setPhaseBoth("playing");
     sfx.start();
   }, [setPhaseBoth]);
@@ -262,6 +429,7 @@ export default function LunarLander() {
     if (!g) return;
     const score = Math.floor(g.score);
     setFinalScore(score);
+    setFinalLevel(g.level);
     if (score > readBest()) writeBest(score);
     setPhaseBoth("gameover");
     sfx.lose();
@@ -395,9 +563,11 @@ export default function LunarLander() {
               <h1 className="bg-gradient-to-r from-slate-100 via-sky-300 to-indigo-400 bg-clip-text text-4xl font-bold tracking-tight text-transparent sm:text-5xl">
                 Lunar Lander
               </h1>
-              <p className="max-w-sm text-center text-sm leading-6 text-zinc-400">
-                Guide the lander down to a lit pad. Touch down gently and upright —
-                you only have so much fuel.
+              <p className="max-w-xl text-center text-sm leading-6 text-zinc-400">
+                Every descent is a mission. Land safely on the marked pad — and
+                each level adds a new objective: precision pads, low fuel,
+                countdowns, crosswinds, fragile cargo, double stops and falling
+                debris.
               </p>
               <Controls />
               <StartButton onClick={startGame}>Begin Descent</StartButton>
@@ -417,6 +587,7 @@ export default function LunarLander() {
               <h2 className="text-4xl font-bold text-rose-400">Mission Failed</h2>
               <div className="flex gap-8">
                 <Stat label="Score" value={finalScore} />
+                <Stat label="Level" value={finalLevel} />
                 <Stat label="Best" value={Math.max(best, finalScore)} />
               </div>
               <StartButton onClick={startGame}>Try Again</StartButton>
@@ -516,6 +687,23 @@ function update(
   }
 
   const l = g.lander;
+  const mission = g.mission;
+
+  if (mission.kind === "timed") {
+    g.timeLeft -= dt;
+    if (g.timeLeft <= 0) {
+      g.timeLeft = 0;
+      crash(g, onGameOver, "Out of time!");
+      return;
+    }
+  }
+
+  if (mission.kind === "wind") {
+    g.windPhase += dt;
+    g.wind = Math.sin(g.windPhase * 0.6) * 34 + Math.sin(g.windPhase * 1.7) * 16;
+  } else {
+    g.wind = 0;
+  }
 
   let rot = 0;
   if (keys.has("arrowleft") || keys.has("a")) rot -= 1;
@@ -555,6 +743,7 @@ function update(
     engineStop();
   }
 
+  l.vx += g.wind * dt;
   l.vy += GRAVITY * dt;
   l.x += l.vx * dt;
   l.y += l.vy * dt;
@@ -564,35 +753,72 @@ function update(
     l.vy = Math.max(0, l.vy);
   }
 
+  if (mission.kind === "hazard") {
+    g.hazardTimer -= dt;
+    if (g.hazardTimer <= 0) {
+      g.hazards.push(makeDebris());
+      g.hazardTimer = Math.max(0.6, 1.7 - g.level * 0.05);
+    }
+    for (let i = g.hazards.length - 1; i >= 0; i--) {
+      const h = g.hazards[i];
+      h.x += h.vx * dt;
+      h.rot += h.rotSpeed * dt;
+      h.y += h.vy * dt;
+      if (h.x < -40 || h.x > W + 40) h.vx = -h.vx;
+      if (h.y > H + 40) {
+        g.hazards.splice(i, 1);
+        continue;
+      }
+      if (Math.hypot(h.x - l.x, h.y - l.y) < h.r + 10) {
+        crash(g, onGameOver, "Struck by debris!");
+        return;
+      }
+    }
+  }
+
   const surf = surfaceAt(g.terrain, l.x);
   const offSide = l.x < -24 || l.x > W + 24;
   const tooLow = l.y > H + 40;
 
   if (offSide || tooLow || l.y + LEG_DROP >= surf.y) {
     const angleNorm = Math.atan2(Math.sin(l.angle), Math.cos(l.angle));
-    const speedOk = Math.abs(l.vx) <= MAX_LAND_VX && Math.abs(l.vy) <= MAX_LAND_VY;
-    const angleOk = Math.abs(angleNorm) <= MAX_LAND_ANGLE;
-    const contactY = tooLow || offSide ? l.y + LEG_DROP : surf.y;
+    const maxVy = g.cargo ? MAX_LAND_VY * 0.55 : MAX_LAND_VY;
+    const maxVx = g.cargo ? MAX_LAND_VX * 0.55 : MAX_LAND_VX;
+    const maxAngle = g.cargo ? MAX_LAND_ANGLE * 0.6 : MAX_LAND_ANGLE;
+    const speedOk = Math.abs(l.vx) <= maxVx && Math.abs(l.vy) <= maxVy;
+    const angleOk = Math.abs(angleNorm) <= maxAngle;
+    const onTarget =
+      g.mission.kind === "multi"
+        ? surf.padId === g.targets[g.stage]
+        : g.targets.includes(surf.padId);
 
-    if (!offSide && !tooLow && surf.pad && speedOk && angleOk) {
-      const soft = Math.max(0, 1 - Math.abs(l.vy) / MAX_LAND_VY);
-      const acc = Math.max(0, 1 - Math.abs(l.vx) / MAX_LAND_VX);
-      const gained = 100 + Math.round(soft * 120 + acc * 80) + Math.round(g.fuel * 2) + g.level * 40;
-      g.score += gained;
-      g.message = { text: `Landed!  +${gained}`, color: "#4ade80", timer: 1.6 };
-      sfx.win();
-      spawnLevel(g, g.level + 1);
-    } else {
-      burst(g.particles, l.x, contactY, 44, ["#fb7185", "#f59e0b", "#fde68a", "#ffffff"], 420);
-      g.shake = 18;
-      g.lives -= 1;
-      sfx.explode();
-      if (g.lives <= 0) {
-        onGameOver();
-        return;
+    if (!offSide && !tooLow && onTarget && speedOk && angleOk) {
+      const soft = Math.max(0, 1 - Math.abs(l.vy) / maxVy);
+      const acc = Math.max(0, 1 - Math.abs(l.vx) / maxVx);
+      const base =
+        100 +
+        Math.round(soft * 120 + acc * 80) +
+        Math.round(g.fuel * 2) +
+        g.level * 40;
+
+      if (mission.kind === "multi" && g.stage < g.targets.length - 1) {
+        g.score += Math.round(base * 0.6);
+        g.stage += 1;
+        g.message = {
+          text: `Checkpoint!  stop ${g.stage}/${g.targets.length}`,
+          color: mission.accent,
+          timer: 1.4,
+        };
+        sfx.pickup();
+        respawnLander(g);
+      } else {
+        g.score += base;
+        g.message = { text: `Landed!  +${base}`, color: "#4ade80", timer: 1.6 };
+        sfx.win();
+        spawnLevel(g, g.level + 1);
       }
-      g.message = { text: "Crashed!", color: "#fb7185", timer: 1.4 };
-      spawnLevel(g, g.level);
+    } else if (crash(g, onGameOver, "Crashed!")) {
+      return;
     }
   }
 
@@ -647,7 +873,9 @@ function draw(
     ctx.translate(rand(-g.shake, g.shake) * 0.4, rand(-g.shake, g.shake) * 0.4);
   }
 
-  drawTerrain(ctx, g.terrain);
+  drawTerrain(ctx, g);
+
+  for (const h of g.hazards) drawDebris(ctx, h);
 
   for (const p of g.particles) {
     ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
@@ -658,7 +886,7 @@ function draw(
   }
   ctx.globalAlpha = 1;
 
-  drawLander(ctx, g.lander);
+  drawLander(ctx, g.lander, g.cargo);
 
   ctx.restore();
 
@@ -679,7 +907,8 @@ function draw(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function drawTerrain(ctx: CanvasRenderingContext2D, terrain: Terrain) {
+function drawTerrain(ctx: CanvasRenderingContext2D, g: GameState) {
+  const terrain = g.terrain;
   const pts = terrain.points;
 
   ctx.beginPath();
@@ -701,18 +930,23 @@ function drawTerrain(ctx: CanvasRenderingContext2D, terrain: Terrain) {
   ctx.lineWidth = 2;
   ctx.stroke();
 
+  const targetId = g.targets[g.stage] ?? -1;
+  const singleTarget = g.targets.length === 1 || g.mission.kind === "multi";
   for (const pad of terrain.pads) {
+    const isTarget = g.targets.includes(pad.id) && (g.mission.kind !== "multi" || pad.id === targetId);
+    const color = isTarget ? g.mission.accent : "#6b7280";
     ctx.save();
-    ctx.strokeStyle = "#fbbf24";
-    ctx.shadowColor = "rgba(251, 191, 36, 0.8)";
-    ctx.shadowBlur = 14;
-    ctx.lineWidth = 4;
+    ctx.globalAlpha = isTarget ? 1 : 0.45;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = isTarget ? g.mission.accent : "rgba(107, 114, 128, 0.5)";
+    ctx.shadowBlur = isTarget ? 16 : 6;
+    ctx.lineWidth = isTarget ? 4 : 2.5;
     ctx.beginPath();
     ctx.moveTo(pad.x - pad.w / 2, pad.y - 2);
     ctx.lineTo(pad.x + pad.w / 2, pad.y - 2);
     ctx.stroke();
 
-    ctx.fillStyle = "#fde68a";
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.moveTo(pad.x - pad.w / 2, pad.y - 4);
     ctx.lineTo(pad.x - pad.w / 2 + 10, pad.y - 16);
@@ -725,11 +959,40 @@ function drawTerrain(ctx: CanvasRenderingContext2D, terrain: Terrain) {
     ctx.lineTo(pad.x + pad.w / 2 - 4, pad.y - 4);
     ctx.closePath();
     ctx.fill();
+
+    if (isTarget && singleTarget && pad.id === targetId) {
+      ctx.beginPath();
+      ctx.moveTo(pad.x - 9, pad.y - 34);
+      ctx.lineTo(pad.x + 9, pad.y - 34);
+      ctx.lineTo(pad.x, pad.y - 22);
+      ctx.closePath();
+      ctx.fill();
+    }
     ctx.restore();
   }
 }
 
-function drawLander(ctx: CanvasRenderingContext2D, l: Lander) {
+function drawDebris(ctx: CanvasRenderingContext2D, h: Debris) {
+  ctx.save();
+  ctx.translate(h.x, h.y);
+  ctx.rotate(h.rot);
+  ctx.beginPath();
+  h.verts.forEach((v, i) => {
+    const px = Math.cos(v.a) * h.r * v.d;
+    const py = Math.sin(v.a) * h.r * v.d;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  });
+  ctx.closePath();
+  ctx.fillStyle = "#5b4a42";
+  ctx.fill();
+  ctx.strokeStyle = "#a8a29e";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawLander(ctx: CanvasRenderingContext2D, l: Lander, cargo: boolean) {
   ctx.save();
   ctx.translate(l.x, l.y);
   ctx.rotate(l.angle);
@@ -783,6 +1046,18 @@ function drawLander(ctx: CanvasRenderingContext2D, l: Lander) {
 
   ctx.fillStyle = "#94a3b8";
   ctx.fillRect(-4, 8, 8, 5);
+
+  if (cargo) {
+    ctx.fillStyle = "#166534";
+    ctx.strokeStyle = "#4ade80";
+    ctx.lineWidth = 1.6;
+    ctx.fillRect(-6, 13, 12, 10);
+    ctx.strokeRect(-6, 13, 12, 10);
+    ctx.beginPath();
+    ctx.moveTo(-6, 18);
+    ctx.lineTo(6, 18);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -795,6 +1070,68 @@ function drawHud(ctx: CanvasRenderingContext2D, g: GameState) {
   ctx.font = "600 13px ui-monospace, SFMono-Regular, Menlo, monospace";
   ctx.fillStyle = "#94a3b8";
   ctx.fillText(`LEVEL ${g.level}`, 22, 56);
+
+  ctx.textAlign = "center";
+  ctx.font = "700 15px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.fillStyle = g.mission.accent;
+  ctx.fillText(g.mission.name.toUpperCase(), W / 2, 32);
+  ctx.font = "500 12px ui-monospace, SFMono-Regular, Menlo, monospace";
+  ctx.fillStyle = "#cbd5e1";
+  ctx.fillText(g.mission.brief, W / 2, 50);
+
+  const monofont = (size: number, weight: number) =>
+    `${weight} ${size}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+
+  if (g.mission.kind === "timed") {
+    const secs = Math.max(0, g.timeLeft);
+    ctx.font = monofont(24, 700);
+    ctx.fillStyle = secs <= 6 ? "#f43f5e" : g.mission.accent;
+    ctx.fillText(`${secs.toFixed(1)}s`, W / 2, 80);
+    ctx.font = monofont(11, 600);
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("TIME LEFT", W / 2, 96);
+  } else if (g.mission.kind === "wind") {
+    const dir = g.wind >= 0 ? 1 : -1;
+    const mag = clamp(Math.abs(g.wind) / 44, 0.25, 1);
+    const len = 24 + mag * 44;
+    const cy = 76;
+    ctx.strokeStyle = g.mission.accent;
+    ctx.fillStyle = g.mission.accent;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - (dir * len) / 2, cy);
+    ctx.lineTo(W / 2 + (dir * len) / 2, cy);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + (dir * len) / 2, cy);
+    ctx.lineTo(W / 2 + (dir * len) / 2 - dir * 9, cy - 6);
+    ctx.lineTo(W / 2 + (dir * len) / 2 - dir * 9, cy + 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.font = monofont(11, 600);
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("CROSSWIND", W / 2, cy + 22);
+  } else if (g.mission.kind === "multi") {
+    ctx.font = monofont(14, 700);
+    ctx.fillStyle = g.mission.accent;
+    ctx.fillText(`STOP ${g.stage + 1} / ${g.targets.length}`, W / 2, 78);
+  } else if (g.mission.kind === "cargo") {
+    ctx.font = monofont(12, 600);
+    ctx.fillStyle = g.mission.accent;
+    ctx.fillText("FRAGILE CARGO ABOARD", W / 2, 78);
+  } else if (g.mission.kind === "hazard") {
+    ctx.font = monofont(12, 600);
+    ctx.fillStyle = g.mission.accent;
+    ctx.fillText("INCOMING DEBRIS", W / 2, 78);
+  } else if (g.mission.kind === "precision") {
+    ctx.font = monofont(12, 600);
+    ctx.fillStyle = g.mission.accent;
+    ctx.fillText("PRECISION PAD", W / 2, 78);
+  } else if (g.mission.kind === "fuel") {
+    ctx.font = monofont(12, 600);
+    ctx.fillStyle = g.mission.accent;
+    ctx.fillText("LIMITED FUEL", W / 2, 78);
+  }
 
   for (let i = 0; i < g.lives; i++) {
     const x = W - 26 - i * 24;
